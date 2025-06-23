@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stock Price Search</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.6/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="./config.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    function StockSearch() {
+      const [ticker, setTicker] = React.useState('');
+      const [stockPrice, setStockPrice] = React.useState(null);
+      const [priceChange, setPriceChange] = React.useState(null);
+      const [error, setError] = React.useState(null);
+
+      const handleSearch = async (e) => {
+        e.preventDefault();
+        if (!ticker.trim()) {
+          setError('Please enter a stock ticker');
+          setStockPrice(null);
+          setPriceChange(null);
+          return;
+        }
+
+        try {
+          const response = await fetch(
+            `https://financialmodelingprep.com/api/v3/quote/${ticker.toUpperCase()}?apikey=${API_CONFIG.FMP_API_KEY}`
+          );
+          const data = await response.json();
+          if (data && data[0] && data[0].price) {
+            setStockPrice(`$${parseFloat(data[0].price).toFixed(2)}`);
+            setPriceChange(parseFloat(data[0].changesPercentage));
+            setError(null);
+          } else {
+            setError('No data found for this ticker');
+            setStockPrice(null);
+            setPriceChange(null);
+          }
+        } catch (error) {
+          console.error('Error fetching stock price:', error);
+          setError('Error fetching price. Please try again.');
+          setStockPrice(null);
+          setPriceChange(null);
+        }
+      };
+
+      return (
+        <div className="min-h-screen bg-black text-white">
+          <header className="bg-red-600 text-white py-6">
+            <div className="max-w-4xl mx-auto px-4 flex justify-between items-center">
+              <h1 className="text-4xl font-bold">Stock Price Search</h1>
+              <a href="index.html" className="text-lg hover:underline">Back to Blog</a>
+            </div>
+          </header>
+          <main className="max-w-4xl mx-auto py-8 px-4">
+            <section className="bg-white p-6 rounded-lg shadow-md">
+              <h2 className="text-2xl font-bold mb-4 text-black">Search for a Stock</h2>
+              <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
+                <input
+                  type="text"
+                  value={ticker}
+                  onChange={(e) => setTicker(e.target.value)}
+                  placeholder="Enter stock ticker (e.g., AAPL)"
+                  className="flex-1 p-2 border rounded text-black"
+                />
+                <button
+                  type="submit"
+                  className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                >
+                  Search
+                </button>
+              </form>
+              {error && (
+                <p className="text-red-600 mt-4 text-center">{error}</p>
+              )}
+              {stockPrice && (
+                <div className="stock-box mx-auto w-11/12 sm:w-5/6 lg:w-4/5 bg-black border border-black rounded p-2 mt-6 text-center">
+                  <p className="text-white">
+                    Current {ticker.toUpperCase()} Stock Price:{' '}
+                    <span className={priceChange >= 0 ? 'text-lime-400' : 'text-red-400'}>
+                      {stockPrice}
+                      {priceChange !== null && ` (${priceChange.toFixed(2)}%)`}
+                    </span>
+                  </p>
+                </div>
+              )}
+            </section>
+          </main>
+        </div>
+      );
+    }
+
+    // Render the app
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<StockSearch />);
+  </script>
+</body>
+</html>

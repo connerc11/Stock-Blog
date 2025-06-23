@@ -9,23 +9,14 @@
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.6/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="./config.js"></script>
-  <script src="./posts.js"></script>
+  <script src="./js/posts.js"></script>
+  <script src="./js/Comment.js"></script>
 </head>
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    // Comment Component
-    function Comment({ text, author, date }) {
-      return (
-        <div className="mt-2 p-2 bg-gray-50 rounded">
-          <p className="text-black">{text}</p>
-          <p className="text-gray-600 text-sm">By {author} on {date}</p>
-        </div>
-      );
-    }
-
     // Post Component
-    function Post({ id, title, date, content, comments, addComment, ticker }) {
+    function Post({ id, title, date, content, comments, addComment, ticker, toggleFavorite }) {
       const [showCommentForm, setShowCommentForm] = React.useState(false);
       const [commentText, setCommentText] = React.useState('');
       const [stockPrice, setStockPrice] = React.useState('Loading...');
@@ -33,12 +24,23 @@
       const [isLiked, setIsLiked] = React.useState(() => {
         return localStorage.getItem(`like-${id}`) === 'true';
       });
+      const [isFavorited, setIsFavorited] = React.useState(() => {
+        return localStorage.getItem(`favorite-${id}`) === 'true';
+      });
 
-      // Toggle like state and save to localStorage
+      // Toggle like state
       const handleLikeToggle = () => {
         const newLikedState = !isLiked;
         setIsLiked(newLikedState);
         localStorage.setItem(`like-${id}`, newLikedState);
+      };
+
+      // Toggle favorite state
+      const handleFavoriteToggle = () => {
+        const newFavoritedState = !isFavorited;
+        setIsFavorited(newFavoritedState);
+        localStorage.setItem(`favorite-${id}`, newFavoritedState);
+        toggleFavorite(id, newFavoritedState);
       };
 
       // Fetch stock price
@@ -140,12 +142,20 @@
                   {priceChange !== null && ` (${priceChange.toFixed(2)}%)`}
                 </span>
               </p>
-              <button
-                onClick={handleLikeToggle}
-                className="text-white hover:text-gray-300 text-sm sm:text-base"
-              >
-                {isLiked ? '♥ Liked' : '♡ Like'}
-              </button>
+              <div className="flex justify-center space-x-4">
+                <button
+                  onClick={handleLikeToggle}
+                  className="text-white hover:text-gray-300 text-sm sm:text-base"
+                >
+                  {isLiked ? '♥ Liked' : '♡ Like'}
+                </button>
+                <button
+                  onClick={handleFavoriteToggle}
+                  className="text-white hover:text-gray-300 text-sm sm:text-base"
+                >
+                  {isFavorited ? '★ Unfavorite' : '☆ Favorite this stock'}
+                </button>
+              </div>
             </div>
           )}
           <button
@@ -193,6 +203,30 @@
     // Main Blog Component
     function Blog() {
       const [posts, setPosts] = React.useState(postsData);
+      const [favorites, setFavorites] = React.useState(() => {
+        const saved = localStorage.getItem('favorites');
+        return saved ? JSON.parse(saved) : [];
+      });
+
+      // Toggle favorite status
+      const toggleFavorite = (postId, isFavorited) => {
+        let updatedFavorites;
+        if (isFavorited) {
+          updatedFavorites = [...favorites, postId];
+        } else {
+          updatedFavorites = favorites.filter(id => id !== postId);
+        }
+        setFavorites(updatedFavorites);
+        localStorage.setItem('favorites', JSON.stringify(updatedFavorites));
+      };
+
+      // Filter favorite posts
+      const favoritePosts = posts
+        .filter(post => favorites.includes(post.id))
+        .sort((a, b) => a.id - b.id); // Sort by ID for consistency
+
+      // All posts (for non-favorites section)
+      const allPosts = posts.sort((a, b) => a.id - b.id);
 
       const addComment = (postId, newComment) => {
         setPosts(posts.map(post =>
@@ -205,25 +239,50 @@
       return (
         <div className="min-h-screen bg-black text-white">
           <header className="bg-red-600 text-white py-6">
-            <h1 className="text-4xl font-bold text-center">SleepLess Stock Thoughts</h1>
+            <div className="max-w-4xl mx-auto px-4 flex justify-between items-center">
+              <h1 className="text-4xl font-bold">SleepLess Stock Thoughts</h1>
+              <a href="search.html" className="text-lg hover:underline">Search Stocks</a>
+            </div>
           </header>
           <main className="max-w-4xl mx-auto py-8 px-4">
-            {posts.map(post => (
-              <Post
-                key={post.id}
-                id={post.id}
-                title={post.title}
-                date={post.date}
-                content={post.content}
-                comments={post.comments}
-                addComment={addComment}
-                ticker={post.ticker}
-              />
-            ))}
+            {favoritePosts.length > 0 && (
+              <section className="mb-12">
+                <h2 className="text-2xl font-bold mb-4 text-white">Favorites</h2>
+                {favoritePosts.map(post => (
+                  <Post
+                    key={post.id}
+                    id={post.id}
+                    title={post.title}
+                    date={post.date}
+                    content={post.content}
+                    comments={post.comments}
+                    addComment={addComment}
+                    ticker={post.ticker}
+                    toggleFavorite={toggleFavorite}
+                  />
+                ))}
+              </section>
+            )}
+            <section>
+              <h2 className="text-2xl font-bold mb-4 text-white">All Posts</h2>
+              {allPosts.map(post => (
+                <Post
+                  key={post.id}
+                  id={post.id}
+                  title={post.title}
+                  date={post.date}
+                  content={post.content}
+                  comments={post.comments}
+                  addComment={addComment}
+                  ticker={post.ticker}
+                  toggleFavorite={toggleFavorite}
+                />
+              ))}
+            </section>
           </main>
         </div>
       );
-  }
+    }
 
     // Render the app
     const root = ReactDOM.createRoot(document.getElementById('root'));
