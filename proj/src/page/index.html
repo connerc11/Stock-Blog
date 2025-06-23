@@ -1,15 +1,15 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Opinion Blog</title>
+  <title>SleepLess Stock Thoughts</title>
   <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.6/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="./config.js"></script>
+  <script src="./posts.js"></script>
 </head>
 <body>
   <div id="root"></div>
@@ -30,6 +30,16 @@
       const [commentText, setCommentText] = React.useState('');
       const [stockPrice, setStockPrice] = React.useState('Loading...');
       const [priceChange, setPriceChange] = React.useState(null);
+      const [isLiked, setIsLiked] = React.useState(() => {
+        return localStorage.getItem(`like-${id}`) === 'true';
+      });
+
+      // Toggle like state and save to localStorage
+      const handleLikeToggle = () => {
+        const newLikedState = !isLiked;
+        setIsLiked(newLikedState);
+        localStorage.setItem(`like-${id}`, newLikedState);
+      };
 
       // Fetch stock price
       const fetchStockPrice = async () => {
@@ -122,13 +132,21 @@
           <p className="text-gray-600 text-sm mb-4">{date}</p>
           <p className="text-black mb-4">{content}</p>
           {ticker && (
-            <p className="text-black mb-4">
-              Current {ticker} Stock Price:{' '}
-              <span className={priceChange >= 0 ? 'text-green-600' : 'text-red-600'}>
-                {stockPrice}
-                {priceChange !== null && ` (${priceChange.toFixed(2)}%)`}
-              </span>
-            </p>
+            <div className="stock-box mx-auto w-11/12 sm:w-5/6 lg:w-4/5 bg-black border border-black rounded p-2 my-4 text-center">
+              <p className="text-white mb-2">
+                Current {ticker} Stock Price:{' '}
+                <span className={priceChange >= 0 ? 'text-lime-400' : 'text-red-400'}>
+                  {stockPrice}
+                  {priceChange !== null && ` (${priceChange.toFixed(2)}%)`}
+                </span>
+              </p>
+              <button
+                onClick={handleLikeToggle}
+                className="text-white hover:text-gray-300 text-sm sm:text-base"
+              >
+                {isLiked ? '♥ Liked' : '♡ Like'}
+              </button>
+            </div>
           )}
           <button
             onClick={() => setShowCommentForm(!showCommentForm)}
@@ -174,56 +192,7 @@
 
     // Main Blog Component
     function Blog() {
-      const [posts, setPosts] = React.useState([
-        {
-          id: 1,
-          title: "Thoughts on SoFi Technologies",
-          date: "June 23, 2025",
-          content: "SoFi Technologies is revolutionizing personal finance with its all-in-one platform. From lending to investing, their growth potential is exciting, but competition is fierce. What’s your take on their strategy?",
-          comments: [],
-          ticker: "SOFI",
-        },
-        {
-          id: 2,
-          title: "Robinhood Markets: A Game Changer?",
-          date: "June 23, 2025",
-          content: "Robinhood has democratized trading, but its volatility raises questions. With recent regulatory scrutiny, can HOOD maintain its momentum? Share your thoughts!",
-          comments: [],
-          ticker: "HOOD",
-        },
-        {
-          id: 3,
-          title: "Iris Energy’s Bitcoin Mining Future",
-          date: "June 23, 2025",
-          content: "Iris Energy’s focus on sustainable Bitcoin mining is intriguing. With IREN’s stock tied to crypto trends, is it a solid long-term bet? Let’s discuss!",
-          comments: [],
-          ticker: "IREN",
-        },
-        {
-          id: 4,
-          title: "MicroStrategy’s Bitcoin Strategy",
-          date: "June 23, 2025",
-          content: "MicroStrategy’s heavy Bitcoin investments make MSTR a unique play. Is their all-in crypto approach brilliant or risky? I’m curious about your opinions!",
-          comments: [],
-          ticker: "MSTR",
-        },
-        {
-          id: 5,
-          title: "Shopify’s E-Commerce Dominance",
-          date: "June 23, 2025",
-          content: "Shopify continues to empower businesses with its e-commerce platform. SHOP’s growth is impressive, but can it sustain its high valuation? What do you think?",
-          comments: [],
-          ticker: "SHOP",
-        },
-        {
-          id: 6,
-          title: "Sea Limited’s Southeast Asia Play",
-          date: "June 23, 2025",
-          content: "Sea Limited’s expansion in gaming, e-commerce, and fintech across Southeast Asia is bold. SE faces regional challenges, but the potential is huge. What’s your view?",
-          comments: [],
-          ticker: "SE",
-        },
-      ]);
+      const [posts, setPosts] = React.useState(postsData);
 
       const addComment = (postId, newComment) => {
         setPosts(posts.map(post =>
@@ -236,7 +205,7 @@
       return (
         <div className="min-h-screen bg-black text-white">
           <header className="bg-red-600 text-white py-6">
-            <h1 className="text-4xl font-bold text-center">My Opinion Blog</h1>
+            <h1 className="text-4xl font-bold text-center">SleepLess Stock Thoughts</h1>
           </header>
           <main className="max-w-4xl mx-auto py-8 px-4">
             {posts.map(post => (
@@ -254,7 +223,7 @@
           </main>
         </div>
       );
-    }
+  }
 
     // Render the app
     const root = ReactDOM.createRoot(document.getElementById('root'));
