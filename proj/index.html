@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Stock Advice Opinion</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.6/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // Blog Post Component
+    function Post({ title, date, content }) {
+      return (
+        <article className="mb-8 p-6 bg-white rounded-lg shadow-md">
+          <h2 className="text-2xl font-bold mb-2">{title}</h2>
+          <p className="text-gray-600 text-sm mb-4">{date}</p>
+          <p className="text-gray-800">{content}</p>
+        </article>
+      );
+    }
+
+    // Main Blog Component
+    function Blog() {
+      const posts = [
+        {
+          id: 1,
+          title: "Ticker: SOFI",
+          date: "June 23, 2025",
+          content: "This is where I share my thoughts on various topics. Stay tuned for more insights!"
+        },
+        {
+          id: 2,
+          title: "Ticker: AMZN",
+          date: "June 22, 2025",
+          content: "Here’s another take on what’s happening in the world. Let me know what you think!"
+        }
+      ];
+
+      return (
+        <div className="min-h-screen bg-gray-100">
+          <header className="bg-blue-600 text-white py-6">
+            <h1 className="text-4xl font-bold text-center">My Opinion Blog</h1>
+          </header>
+          <main className="max-w-4xl mx-auto py-8 px-4">
+            {posts.map(post => (
+              <Post
+                key={post.id}
+                title={post.title}
+                date={post.date}
+                content={post.content}
+              />
+            ))}
+          </main>
+        </div>
+      );
+    }
+
+    // Render the app
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<Blog />);
+  </script>
+</body>
+</html>
