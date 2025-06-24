@@ -47,4 +47,13 @@ const postsData = [
     comments: [],
     ticker: "SE",
   },
+  {
+    id: 7,
+    title: "Capital One’s Digital Banking Strategy",
+    date: "June 23, 2025",
+    content: "Capital One is transforming into a digital banking powerhouse. With its focus on technology and customer experience, COF is well-positioned for the future. What are your thoughts on its strategy?",
+    comments: [],
+    ticker: "COF",
+  },
+ 
 ];
