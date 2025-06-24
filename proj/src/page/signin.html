@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign In</title>
+  <title>Sign In - SleepLess Stock Thoughts</title>
   <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.6/babel.min.js"></script>
@@ -12,6 +12,26 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
+    class ErrorBoundary extends React.Component {
+      state = { hasError: false, error: null };
+      static getDerivedStateFromError(error) { return { hasError: true, error }; }
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div className="min-h-screen bg-black text-white flex items-center justify-center">
+              <div className="text-center">
+                <h1 className="text-4xl font-bold mb-4">Something went wrong</h1>
+                <p className="text-red-600 mb-4">{this.state.error?.message || 'Unknown error'}</p>
+                <p className="mb-4">Check console (F12) for details.</p>
+                <a href="signin.html" className="text-blue-500 hover:underline">Refresh</a>
+              </div>
+            </div>
+          );
+        }
+        return this.props.children;
+      }
+    }
+
     function SignIn() {
       const [isCreateAccount, setIsCreateAccount] = React.useState(false);
       const [username, setUsername] = React.useState('');
@@ -19,73 +39,40 @@
       const [confirmPassword, setConfirmPassword] = React.useState('');
       const [error, setError] = React.useState(null);
 
-      const validatePassword = (pwd) => {
-        return pwd.length >= 5 && /[A-Z]/.test(pwd);
-      };
+      const validatePassword = (pwd) => pwd.length >= 5 && /[A-Z]/.test(pwd);
 
       const handleCreateAccount = (e) => {
         e.preventDefault();
         setError(null);
-
-        if (!username.trim()) {
-          setError('Username is required');
-          return;
-        }
-
-        if (!validatePassword(password)) {
-          setError('Password must be at least 5 characters with at least one capital letter');
-          return;
-        }
-
-        if (password !== confirmPassword) {
-          setError('Passwords do not match');
-          return;
-        }
-
-        // Check if username exists
+        if (!username.trim()) { setError('Username is required'); return; }
+        if (!validatePassword(password)) { setError('Password must be at least 5 characters with at least one capital letter'); return; }
+        if (password !== confirmPassword) { setError('Passwords do not match'); return; }
         const users = JSON.parse(localStorage.getItem('users') || '{}');
-        if (users[username]) {
-          setError('Username already exists');
-          return;
-        }
-
-        // Save new user
+        if (users[username]) { setError('Username already exists'); return; }
         users[username] = { password };
         localStorage.setItem('users', JSON.stringify(users));
-        setError(null);
-        setUsername('');
-        setPassword('');
-        setConfirmPassword('');
-        setIsCreateAccount(false);
+        setError(null); setUsername(''); setPassword(''); setConfirmPassword(''); setIsCreateAccount(false);
         alert('Account created successfully! Please sign in.');
       };
 
       const handleSignIn = (e) => {
         e.preventDefault();
         setError(null);
-
-        if (!username.trim()) {
-          setError('Username is required');
-          return;
-        }
-
-        if (!password) {
-          setError('Password is required');
-          return;
-        }
-
-        // Check credentials
+        if (!username.trim()) { setError('Username is required'); return; }
+        if (!password) { setError('Password is required'); return; }
         const users = JSON.parse(localStorage.getItem('users') || '{}');
-        if (!users[username] || users[username].password !== password) {
-          setError('Invalid username or password');
-          return;
-        }
-
-        // Set logged-in state and redirect
+        if (!users[username] || users[username].password !== password) { setError('Invalid username or password'); return; }
         localStorage.setItem('loggedIn', 'true');
         localStorage.setItem('currentUser', username);
         window.location.href = 'index.html';
       };
+
+      const handleProfileClick = () => {
+        const isLoggedIn = localStorage.getItem('loggedIn') === 'true';
+        window.location.href = isLoggedIn ? 'profile.html' : 'signin.html';
+      };
+
+      const isLoggedIn = localStorage.getItem('loggedIn') === 'true';
 
       return (
         <div className="min-h-screen bg-black text-white">
@@ -93,81 +80,42 @@
             <div className="max-w-4xl mx-auto px-4 flex justify-between items-center">
               <h1 className="text-4xl font-bold">Sign In</h1>
               <div className="flex space-x-4">
-                <a href="index.html" className="text-lg hover:underline">Blog</a>
+                <a href="index.html" className="text-lg hover:underline">Home</a>
                 <a href="search.html" className="text-lg hover:underline">Search Stocks</a>
+                {!isLoggedIn && (
+                  <a href="signin.html" className="text-lg hover:underline">Sign In</a>
+                )}
+                <button
+                  onClick={handleProfileClick}
+                  className="text-lg hover:underline bg-transparent border-none cursor-pointer"
+                >
+                  Profile
+                </button>
               </div>
             </div>
           </header>
           <main className="max-w-4xl mx-auto py-8 px-4">
             <section className="bg-white p-6 rounded-lg shadow-md">
-              <h2 className="text-2xl font-bold mb-4 text-black">
-                {isCreateAccount ? 'Create Account' : 'Sign In'}
-              </h2>
-              <form
-                onSubmit={isCreateAccount ? handleCreateAccount : handleSignIn}
-                className="flex flex-col gap-4"
-              >
+              <h2 className="text-2xl font-bold mb-4 text-black">{isCreateAccount ? 'Create Account' : 'Sign In'}</h2>
+              <form onSubmit={isCreateAccount ? handleCreateAccount : handleSignIn} className="flex flex-col gap-4">
                 <div>
-                  <label htmlFor="username" className="block text-black mb-1">
-                    Username
-                  </label>
-                  <input
-                    id="username"
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Enter username"
-                    className="w-full p-2 border rounded text-black"
-                  />
+                  <label htmlFor="username" className="block text-black mb-1">Username</label>
+                  <input id="username" type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Enter username" className="w-full p-2 border rounded text-black" />
                 </div>
                 <div>
-                  <label htmlFor="password" className="block text-black mb-1">
-                    Password
-                  </label>
-                  <input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter password"
-                    className="w-full p-2 border rounded text-black"
-                  />
+                  <label htmlFor="password" className="block text-black mb-1">Password</label>
+                  <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter password" className="w-full p-2 border rounded text-black" />
                 </div>
                 {isCreateAccount && (
                   <div>
-                    <label htmlFor="confirmPassword" className="block text-black mb-1">
-                      Confirm Password
-                    </label>
-                    <input
-                      id="confirmPassword"
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Confirm password"
-                      className="w-full p-2 border rounded text-black"
-                    />
+                    <label htmlFor="confirmPassword" className="block text-black mb-1">Confirm Password</label>
+                    <input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm password" className="w-full p-2 border rounded text-black" />
                   </div>
                 )}
-                {error && (
-                  <p className="text-red-600 text-center">{error}</p>
-                )}
-                <button
-                  type="submit"
-                  className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-                >
-                  {isCreateAccount ? 'Create Account' : 'Sign In'}
-                </button>
+                {error && <p className="text-red-600 text-center">{error}</p>}
+                <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">{isCreateAccount ? 'Create Account' : 'Sign In'}</button>
               </form>
-              <button
-                onClick={() => {
-                  setIsCreateAccount(!isCreateAccount);
-                  setError(null);
-                  setUsername('');
-                  setPassword('');
-                  setConfirmPassword('');
-                }}
-                className="mt-4 text-blue-500 hover:underline"
-              >
+              <button onClick={() => { setIsCreateAccount(!isCreateAccount); setError(null); setUsername(''); setPassword(''); setConfirmPassword(''); }} className="mt-4 text-blue-500 hover:underline">
                 {isCreateAccount ? 'Already have an account? Sign In' : 'Need an account? Create one'}
               </button>
             </section>
@@ -176,9 +124,8 @@
       );
     }
 
-    // Render the app
     const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<SignIn />);
+    root.render(<ErrorBoundary><SignIn /></ErrorBoundary>);
   </script>
 </body>
 </html>

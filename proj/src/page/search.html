@@ -3,81 +3,207 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stock Price Search</title>
+  <title>Stock Price Search - SleepLess Stock Thoughts</title>
   <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.6/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="./config.js"></script>
+  <script src="./../config.js"></script>
 </head>
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    function StockSearch() {
-      const [ticker, setTicker] = React.useState('');
-      const [stockResults, setStockResults] = React.useState([]);
-      const [error, setError] = React.useState(null);
+    // Error Boundary Component
+    class ErrorBoundary extends React.Component {
+      state = { hasError: false, error: null };
 
-      const handleSearch = async (e) => {
-        e.preventDefault();
-        if (!ticker.trim()) {
+      static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+      }
+
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div className="min-h-screen bg-black text-white flex items-center justify-center">
+              <div className="text-center">
+                <h1 className="text-4xl font-bold mb-4">Something went wrong</h1>
+                <p className="text-red-600 mb-4">{this.state.error?.message || 'Unknown error'}</p>
+                <p className="mb-4">Check console (F12) for details. Ensure config.js is correct with a valid FMP API key.</p>
+                <a href="search.html" className="text-blue-500 hover:underline">Refresh</a>
+              </div>
+            </div>
+          );
+        }
+        return this.props.children;
+      }
+    }
+
+    // Debounce utility
+    function debounce(func, wait) {
+      let timeout;
+      return function executedFunction(...args) {
+        const later = () => {
+          clearTimeout(timeout);
+          func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+      };
+    }
+
+    function StockSearch() {
+      if (typeof API_CONFIG === 'undefined' || !API_CONFIG.FMP_API_KEY) {
+        throw new Error('API_CONFIG or FMP_API_KEY is not defined. Please check config.js.');
+      }
+
+      const [ticker, setTicker] = React.useState('');
+      const [stockResults, setStockResults] = React.useState(() => {
+        const saved = localStorage.getItem('stockResults');
+        return saved ? JSON.parse(saved) : [];
+      });
+      const [error, setError] = React.useState(null);
+      const [isLoading, setIsLoading] = React.useState(false);
+
+      // Save stockResults to localStorage
+      React.useEffect(() => {
+        localStorage.setItem('stockResults', JSON.stringify(stockResults));
+      }, [stockResults]);
+
+      // Check cache for recent data
+      const getCachedData = (ticker) => {
+        const cache = JSON.parse(localStorage.getItem('stockCache') || '{}');
+        const cached = cache[ticker];
+        if (cached && Date.now() - cached.timestamp < 3600000) { // 1 hour cache
+          return cached.data;
+        }
+        return null;
+      };
+
+      // Save to cache
+      const setCachedData = (ticker, data) => {
+        const cache = JSON.parse(localStorage.getItem('stockCache') || '{}');
+        cache[ticker] = { data, timestamp: Date.now() };
+        localStorage.setItem('stockCache', JSON.stringify(cache));
+      };
+
+      const handleSearch = async (upperTicker) => {
+        setError(null);
+        setIsLoading(true);
+
+        if (!upperTicker.trim()) {
           setError('Please enter a stock ticker');
+          setIsLoading(false);
+          return;
+        }
+
+        if (stockResults.find(result => result.ticker === upperTicker)) {
+          setError(`${upperTicker} is already displayed`);
+          setIsLoading(false);
+          return;
+        }
+
+        const cachedData = getCachedData(upperTicker);
+        if (cachedData) {
+          console.log(`Using cached data for ${upperTicker}`);
+          setStockResults([...stockResults, cachedData]);
+          setTicker('');
+          setError(null);
+          setIsLoading(false);
           return;
         }
 
         try {
+          console.log(`API request for ${upperTicker} at ${new Date().toISOString()}`);
           const response = await fetch(
-            `https://financialmodelingprep.com/api/v3/quote/${ticker.toUpperCase()}?apikey=${API_CONFIG.FMP_API_KEY}`
+            `https://financialmodelingprep.com/api/v3/quote/${upperTicker}?apikey=${API_CONFIG.FMP_API_KEY}`
           );
+          if (!response.ok) {
+            if (response.status === 429) {
+              throw new Error('API rate limit exceeded (250 requests/day). Try again tomorrow or upgrade FMP plan at financialmodelingprep.com.');
+            }
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+
           const data = await response.json();
-          if (data && data[0] && data[0].price) {
-            setStockResults([
-              ...stockResults,
-              {
-                ticker: ticker.toUpperCase(),
-                price: `$${parseFloat(data[0].price).toFixed(2)}`,
-                changePercent: parseFloat(data[0].changesPercentage)
-              }
-            ]);
+          if (data && data[0] && data[0].price && data[0].symbol) {
+            const result = {
+              id: Date.now(),
+              ticker: data[0].symbol,
+              price: `$${parseFloat(data[0].price).toFixed(2)}`,
+              changePercent: parseFloat(data[0].changesPercentage) || 0
+            };
+            setStockResults([...stockResults, result]);
+            setCachedData(upperTicker, result);
+            setTicker('');
             setError(null);
-            setTicker(''); // Clear input after successful search
           } else {
-            setError('No data found for this ticker');
+            setError('No valid data found for this ticker. Please check the ticker symbol.');
           }
         } catch (error) {
           console.error('Error fetching stock price:', error);
-          setError('Error fetching price. Please try again.');
+          setError(`Failed to fetch data for ${upperTicker}. ${error.message}`);
+        } finally {
+          setIsLoading(false);
         }
       };
 
-      const handleRemove = (tickerToRemove) => {
-        setStockResults(stockResults.filter(result => result.ticker !== tickerToRemove));
+      const debouncedSearch = React.useCallback(debounce((ticker) => {
+        handleSearch(ticker.toUpperCase());
+      }, 500), [stockResults]);
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        debouncedSearch(ticker);
       };
+
+      const handleRemove = (id) => {
+        setStockResults(stockResults.filter(result => result.id !== id));
+      };
+
+      const handleProfileClick = () => {
+        const isLoggedIn = localStorage.getItem('loggedIn') === 'true';
+        window.location.href = isLoggedIn ? 'profile.html' : 'signin.html';
+      };
+
+      const isLoggedIn = localStorage.getItem('loggedIn') === 'true';
 
       return (
         <div className="min-h-screen bg-black text-white">
           <header className="bg-red-600 text-white py-6">
             <div className="max-w-4xl mx-auto px-4 flex justify-between items-center">
               <h1 className="text-4xl font-bold">Stock Price Search</h1>
-              <a href="index.html" className="text-lg hover:underline">Back to Blog</a>
+              <div className="flex space-x-4">
+                <a href="index.html" className="text-lg hover:underline">Home</a>
+                {!isLoggedIn && (
+                  <a href="signin.html" className="text-lg hover:underline">Sign In</a>
+                )}
+                <button
+                  onClick={handleProfileClick}
+                  className="text-lg hover:underline bg-transparent border-none cursor-pointer"
+                >
+                  Profile
+                </button>
+              </div>
             </div>
           </header>
           <main className="max-w-4xl mx-auto py-8 px-4">
             <section className="bg-white p-6 rounded-lg shadow-md">
               <h2 className="text-2xl font-bold mb-4 text-black">Search for a Stock</h2>
-              <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
+              <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4">
                 <input
                   type="text"
                   value={ticker}
                   onChange={(e) => setTicker(e.target.value)}
                   placeholder="Enter stock ticker (e.g., AAPL)"
                   className="flex-1 p-2 border rounded text-black"
+                  disabled={isLoading}
                 />
                 <button
                   type="submit"
-                  className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                  className={`bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  disabled={isLoading}
                 >
-                  Search
+                  {isLoading ? 'Searching...' : 'Search'}
                 </button>
               </form>
               {error && (
@@ -85,21 +211,20 @@
               )}
               {stockResults.length > 0 && (
                 <div className="mt-6">
-                  <h3 className="text-lg font-semibold mb-4 text-black">Search Results</h3>
-                  {stockResults.map((result, index) => (
+                  <h3 className="text-lg font-semibold text-black mb-2">Search Results</h3>
+                  {stockResults.map((result) => (
                     <div
-                      key={index}
+                      key={result.id}
                       className="stock-box mx-auto w-11/12 sm:w-5/6 lg:w-4/5 bg-black border border-black rounded p-2 mb-4 text-center"
                     >
                       <p className="text-white mb-2">
                         Current {result.ticker} Stock Price:{' '}
                         <span className={result.changePercent >= 0 ? 'text-lime-400' : 'text-red-400'}>
-                          {result.price}
-                          {result.changePercent !== null && ` (${result.changePercent.toFixed(2)}%)`}
+                          {result.price} ({result.changePercent.toFixed(2)}%)
                         </span>
                       </p>
                       <button
-                        onClick={() => handleRemove(result.ticker)}
+                        onClick={() => handleRemove(result.id)}
                         className="text-white hover:text-gray-300 text-sm sm:text-base"
                       >
                         Remove
@@ -114,9 +239,13 @@
       );
     }
 
-    // Render the app
+    // Render with error boundary
     const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<StockSearch />);
+    root.render(
+      <ErrorBoundary>
+        <StockSearch />
+      </ErrorBoundary>
+    );
   </script>
 </body>
 </html>

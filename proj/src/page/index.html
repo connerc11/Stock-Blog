@@ -3,20 +3,142 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SleepLess Stock Thoughts</title>
+  <title>Search Stock</title>
   <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.6/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="./config.js"></script>
+  <script src="./../config.js"></script>
   <script src="./js/Posts.js"></script>
   <script src="./js/Comment.js"></script>
 </head>
 <body>
   <div id="root"></div>
   <script type="text/babel">
+    // Error Boundary Component
+    class ErrorBoundary extends React.Component {
+      state = { hasError: false, error: null };
+
+      static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+      }
+
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div className="min-h-screen bg-black text-white flex items-center justify-center">
+              <div className="text-center">
+                <h1 className="text-4xl font-bold mb-4">Something went wrong</h1>
+                <p className="text-red-600 mb-4">{this.state.error?.message || 'Unknown error'}</p>
+                <p className="mb-4">Check console (F12) for details. Ensure config.js, posts.js, and Comment.js are correct.</p>
+                <a href="index.html" className="text-blue-500 hover:underline">Refresh</a>
+              </div>
+            </div>
+          );
+        }
+        return this.props.children;
+      }
+    }
+
+    // Blog Component
+    function Blog() {
+      if (typeof API_CONFIG === 'undefined' || !API_CONFIG.FMP_API_KEY) {
+        throw new Error('API_CONFIG or FMP_API_KEY is not defined. Please check config.js.');
+      }
+      if (typeof postsData === 'undefined') {
+        throw new Error('postsData is not defined. Please check posts.js.');
+      }
+      if (typeof Comment === 'undefined') {
+        throw new Error('Comment component is not defined. Please check Comment.js.');
+      }
+
+      const [posts, setPosts] = React.useState(postsData);
+      const [favorites, setFavorites] = React.useState(() => {
+        return JSON.parse(localStorage.getItem('favorites') || '[]');
+      });
+
+      // Save favorites to localStorage
+      React.useEffect(() => {
+        localStorage.setItem('favorites', JSON.stringify(favorites));
+      }, [favorites]);
+
+      // Check cache for stock data
+      const getCachedStockData = (ticker) => {
+        const cache = JSON.parse(localStorage.getItem('stockCache') || '{}');
+        const cached = cache[ticker];
+        if (cached && Date.now() - cached.timestamp < 3600000) { // 1 hour cache
+          return cached.data;
+        }
+        return null;
+      };
+
+      // Save to cache
+      const setCachedStockData = (ticker, data) => {
+        const cache = JSON.parse(localStorage.getItem('stockCache') || '{}');
+        cache[ticker] = { data, timestamp: Date.now() };
+        localStorage.setItem('stockCache', JSON.stringify(cache));
+      };
+
+      const toggleFavorite = (postId, isFavorited) => {
+        if (isFavorited) {
+          setFavorites([...favorites, postId]);
+        } else {
+          setFavorites(favorites.filter(id => id !== postId));
+        }
+      };
+
+      const addComment = (postId, comment) => {
+        setPosts(posts.map(post =>
+          post.id === postId
+            ? { ...post, comments: [...post.comments, comment] }
+            : post
+        ));
+      };
+
+      const handleProfileClick = () => {
+        const isLoggedIn = localStorage.getItem('loggedIn') === 'true';
+        window.location.href = isLoggedIn ? 'profile.html' : 'signin.html';
+      };
+
+      const isLoggedIn = localStorage.getItem('loggedIn') === 'true';
+
+      return (
+        <div className="min-h-screen bg-black text-white">
+          <header className="bg-red-600 text-white py-6">
+            <div className="max-w-4xl mx-auto px-4 flex justify-between items-center">
+              <h1 className="text-4xl font-bold">SleepLess Stock Thoughts</h1>
+              <div className="flex space-x-4">
+                <a href="search.html" className="text-lg hover:underline">Search Stocks</a>
+                {!isLoggedIn && (
+                  <a href="signin.html" className="text-lg hover:underline">Sign In</a>
+                )}
+                <button
+                  onClick={handleProfileClick}
+                  className="text-lg hover:underline bg-transparent border-none cursor-pointer"
+                >
+                  Profile
+                </button>
+              </div>
+            </div>
+          </header>
+          <main className="max-w-4xl mx-auto py-8 px-4">
+            {posts.map(post => (
+              <Post
+                key={post.id}
+                {...post}
+                addComment={addComment}
+                toggleFavorite={toggleFavorite}
+                getCachedStockData={getCachedStockData}
+                setCachedStockData={setCachedStockData}
+              />
+            ))}
+          </main>
+        </div>
+      );
+    }
+
     // Post Component
-    function Post({ id, title, date, content, comments, addComment, ticker, toggleFavorite }) {
+    function Post({ id, title, date, content, comments, addComment, ticker, toggleFavorite, getCachedStockData, setCachedStockData }) {
       const [showCommentForm, setShowCommentForm] = React.useState(false);
       const [commentText, setCommentText] = React.useState('');
       const [stockPrice, setStockPrice] = React.useState('Loading...');
@@ -45,30 +167,46 @@
 
       // Fetch stock price
       const fetchStockPrice = async () => {
+        const cachedData = getCachedStockData(ticker);
+        if (cachedData) {
+          console.log(`Using cached data for ${ticker}`);
+          setStockPrice(cachedData.price);
+          setPriceChange(cachedData.changePercent);
+          return;
+        }
+
         try {
+          console.log(`API request for ${ticker} at ${new Date().toISOString()}`);
           const response = await fetch(
             `https://financialmodelingprep.com/api/v3/quote/${ticker}?apikey=${API_CONFIG.FMP_API_KEY}`
           );
+          if (!response.ok) {
+            if (response.status === 429) {
+              throw new Error('API rate limit exceeded (250 requests/day). Try again tomorrow or upgrade FMP plan.');
+            }
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          }
           const data = await response.json();
           if (data && data[0] && data[0].price) {
-            setStockPrice(`$${parseFloat(data[0].price).toFixed(2)}`);
+            const price = `$${parseFloat(data[0].price).toFixed(2)}`;
             const changePercent = parseFloat(data[0].changesPercentage);
+            setStockPrice(price);
             setPriceChange(changePercent);
+            setCachedStockData(ticker, { price, changePercent });
           } else {
             setStockPrice('Price unavailable');
           }
         } catch (error) {
           console.error('Error fetching stock price:', error);
-          setStockPrice('Error fetching price');
+          setStockPrice(`Error: ${error.message}`);
         }
       };
 
       // Schedule next update
       const scheduleNextUpdate = () => {
         const now = new Date();
-        const isWeekday = now.getDay() >= 1 && now.getDay() <= 5; // Monday–Friday
+        const isWeekday = now.getDay() >= 1 && now.getDay() <= 5;
         if (!isWeekday) {
-          // Skip to next Monday 9:30 AM
           const nextMonday = new Date(now);
           nextMonday.setDate(now.getDate() + ((8 - now.getDay()) % 7));
           nextMonday.setHours(9, 30, 0, 0);
@@ -79,7 +217,6 @@
           }, timeUntilNext);
         }
 
-        // Set next update to 9:30 AM or 4:00 PM EDT
         const today930AM = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9, 30, 0);
         const today4PM = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 0, 0);
         let nextUpdate;
@@ -89,7 +226,6 @@
         } else if (now < today4PM) {
           nextUpdate = today4PM;
         } else {
-          // Next day’s 9:30 AM
           nextUpdate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9, 30, 0);
         }
 
@@ -103,8 +239,7 @@
       // Initialize price fetch and schedule updates
       React.useEffect(() => {
         if (!ticker) return;
-
-        fetchStockPrice(); // Initial fetch
+        fetchStockPrice();
         const timeoutId = scheduleNextUpdate();
         return () => clearTimeout(timeoutId);
       }, [ticker]);
@@ -181,112 +316,25 @@
               </button>
             </form>
           )}
-          <div className="mt-4">
-            <h3 className="text-lg font-semibold text-black">Comments</h3>
-            {comments.length > 0 ? (
-              comments.map((comment, index) => (
-                <Comment
-                  key={index}
-                  text={comment.text}
-                  author={comment.author}
-                  date={comment.date}
-                />
-              ))
-            ) : (
-              <p className="text-gray-600">No comments yet.</p>
-            )}
-          </div>
+          {comments.length > 0 && (
+            <div className="mt-4">
+              <h3 className="text-lg font-semibold text-black mb-2">Comments</h3>
+              {comments.map((comment, index) => (
+                <Comment key={index} {...comment} />
+              ))}
+            </div>
+          )}
         </article>
       );
     }
 
-    // Main Blog Component
-    function Blog() {
-      const [posts, setPosts] = React.useState(postsData);
-      const [favorites, setFavorites] = React.useState(() => {
-        const saved = localStorage.getItem('favorites');
-        return saved ? JSON.parse(saved) : [];
-      });
-
-      // Toggle favorite status
-      const toggleFavorite = (postId, isFavorited) => {
-        let updatedFavorites;
-        if (isFavorited) {
-          updatedFavorites = [...favorites, postId];
-        } else {
-          updatedFavorites = favorites.filter(id => id !== postId);
-        }
-        setFavorites(updatedFavorites);
-        localStorage.setItem('favorites', JSON.stringify(updatedFavorites));
-      };
-
-      // Filter favorite posts
-      const favoritePosts = posts
-        .filter(post => favorites.includes(post.id))
-        .sort((a, b) => a.id - b.id); // Sort by ID for consistency
-
-      // All posts (for non-favorites section)
-      const allPosts = posts.sort((a, b) => a.id - b.id);
-
-      const addComment = (postId, newComment) => {
-        setPosts(posts.map(post =>
-          post.id === postId
-            ? { ...post, comments: [...post.comments, newComment] }
-            : post
-        ));
-      };
-
-      return (
-        <div className="min-h-screen bg-black text-white">
-          <header className="bg-red-600 text-white py-6">
-            <div className="max-w-4xl mx-auto px-4 flex justify-between items-center">
-              <h1 className="text-4xl font-bold">SleepLess Stock Thoughts</h1>
-              <a href="search.html" className="text-lg hover:underline">Search Stocks</a>
-            </div>
-          </header>
-          <main className="max-w-4xl mx-auto py-8 px-4">
-            {favoritePosts.length > 0 && (
-              <section className="mb-12">
-                <h2 className="text-2xl font-bold mb-4 text-white">Favorites</h2>
-                {favoritePosts.map(post => (
-                  <Post
-                    key={post.id}
-                    id={post.id}
-                    title={post.title}
-                    date={post.date}
-                    content={post.content}
-                    comments={post.comments}
-                    addComment={addComment}
-                    ticker={post.ticker}
-                    toggleFavorite={toggleFavorite}
-                  />
-                ))}
-              </section>
-            )}
-            <section>
-              <h2 className="text-2xl font-bold mb-4 text-white">All Posts</h2>
-              {allPosts.map(post => (
-                <Post
-                  key={post.id}
-                  id={post.id}
-                  title={post.title}
-                  date={post.date}
-                  content={post.content}
-                  comments={post.comments}
-                  addComment={addComment}
-                  ticker={post.ticker}
-                  toggleFavorite={toggleFavorite}
-                />
-              ))}
-            </section>
-          </main>
-        </div>
-      );
-    }
-
-    // Render the app
+    // Render with error boundary
     const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<Blog />);
+    root.render(
+      <ErrorBoundary>
+        <Blog />
+      </ErrorBoundary>
+    );
   </script>
 </body>
 </html>

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Profile - SleepLess Stock Thoughts</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.6/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="./../config.js"></script>
+  <script src="./js/Posts.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // Error Boundary Component
+    class ErrorBoundary extends React.Component {
+      state = { hasError: false, error: null };
+
+      static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+      }
+
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div className="min-h-screen bg-black text-white flex items-center justify-center">
+              <div className="text-center">
+                <h1 className="text-4xl font-bold mb-4">Something went wrong</h1>
+                <p className="text-red-600 mb-4">{this.state.error?.message || 'Unknown error'}</p>
+                <p className="mb-4">Check console (F12) for details. Ensure config.js and posts.js are correct.</p>
+                <a href="profile.html" className="text-blue-500 hover:underline">Refresh</a>
+              </div>
+            </div>
+          );
+        }
+        return this.props.children;
+      }
+    }
+
+    function Profile() {
+      if (typeof API_CONFIG === 'undefined' || !API_CONFIG.FMP_API_KEY) {
+        throw new Error('API_CONFIG or FMP_API_KEY is not defined. Please check config.js.');
+      }
+      if (typeof postsData === 'undefined') {
+        throw new Error('postsData is not defined. Please check posts.js.');
+      }
+
+      const isLoggedIn = localStorage.getItem('loggedIn') === 'true';
+      const currentUser = localStorage.getItem('currentUser') || 'Guest';
+      const [favorites, setFavorites] = React.useState(() => {
+        return JSON.parse(localStorage.getItem('favorites') || '[]');
+      });
+      const [stockPrices, setStockPrices] = React.useState({});
+
+      // Check cache for stock data
+      const getCachedStockData = (ticker) => {
+        const cache = JSON.parse(localStorage.getItem('stockCache') || '{}');
+        const cached = cache[ticker];
+        if (cached && Date.now() - cached.timestamp < 3600000) { // 1 hour cache
+          return cached.data;
+        }
+        return null;
+      };
+
+      // Save to cache
+      const setCachedStockData = (ticker, data) => {
+        const cache = JSON.parse(localStorage.getItem('stockCache') || '{}');
+        cache[ticker] = { data, timestamp: Date.now() };
+        localStorage.setItem('stockCache', JSON.stringify(cache));
+      };
+
+      // Fetch stock price for a ticker
+      const fetchStockPrice = async (ticker) => {
+        const cachedData = getCachedStockData(ticker);
+        if (cachedData) {
+          console.log(`Using cached data for ${ticker}`);
+          setStockPrices(prev => ({
+            ...prev,
+            [ticker]: { price: cachedData.price, changePercent: cachedData.changePercent }
+          }));
+          return;
+        }
+
+        try {
+          console.log(`API request for ${ticker} at ${new Date().toISOString()}`);
+          const response = await fetch(
+            `https://financialmodelingprep.com/api/v3/quote/${ticker}?apikey=${API_CONFIG.FMP_API_KEY}`
+          );
+          if (!response.ok) {
+            if (response.status === 429) {
+              throw new Error('API rate limit exceeded (250 requests/day). Try again tomorrow or upgrade FMP plan.');
+            }
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+          const data = await response.json();
+          if (data && data[0] && data[0].price) {
+            const price = `$${parseFloat(data[0].price).toFixed(2)}`;
+            const changePercent = parseFloat(data[0].changesPercentage) || 0;
+            setStockPrices(prev => ({
+              ...prev,
+              [ticker]: { price, changePercent }
+            }));
+            setCachedStockData(ticker, { price, changePercent });
+          } else {
+            setStockPrices(prev => ({
+              ...prev,
+              [ticker]: { price: 'Price unavailable', changePercent: null }
+            }));
+          }
+        } catch (error) {
+          console.error('Error fetching stock price:', error);
+          setStockPrices(prev => ({
+            ...prev,
+            [ticker]: { price: `Error: ${error.message}`, changePercent: null }
+          }));
+        }
+      };
+
+      // Fetch prices for favorited posts
+      React.useEffect(() => {
+        if (!isLoggedIn) {
+          window.location.href = 'signin.html';
+          return;
+        }
+        const favoritePosts = postsData.filter(post => favorites.includes(post.id));
+        favoritePosts.forEach(post => {
+          if (post.ticker) {
+            fetchStockPrice(post.ticker);
+          }
+        });
+      }, [favorites, isLoggedIn]);
+
+      const handleProfileClick = () => {
+        const isLoggedIn = localStorage.getItem('loggedIn') === 'true';
+        window.location.href = isLoggedIn ? 'profile.html' : 'signin.html';
+      };
+
+      const handleSignOut = () => {
+        localStorage.removeItem('loggedIn');
+        localStorage.removeItem('currentUser');
+        window.location.href = 'index.html';
+      };
+
+      const favoritePosts = postsData.filter(post => favorites.includes(post.id));
+
+      return (
+        <div className="min-h-screen bg-black text-white">
+          <header className="bg-red-600 text-white py-6">
+            <div className="max-w-4xl mx-auto px-4 flex justify-between items-center">
+              <h1 className="text-4xl font-bold">User Profile</h1>
+              <div className="flex space-x-4">
+                <a href="index.html" className="text-lg hover:underline">Home</a>
+                <a href="search.html" className="text-lg hover:underline">Search Stocks</a>
+                {!isLoggedIn && (
+                  <a href="signin.html" className="text-lg hover:underline">Sign In</a>
+                )}
+                <button
+                  onClick={handleProfileClick}
+                  className="text-lg hover:underline bg-transparent border-none cursor-pointer"
+                >
+                  Profile
+                </button>
+              </div>
+            </div>
+          </header>
+          <main className="max-w-4xl mx-auto py-8 px-4">
+            <section className="bg-white p-6 rounded-lg shadow-md">
+              <h2 className="text-2xl font-bold mb-4 text-black">Welcome, {currentUser}</h2>
+              <button
+                onClick={handleSignOut}
+                className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 mb-6"
+              >
+                Sign Out
+              </button>
+              <h3 className="text-lg font-semibold text-black mb-4">Your Favorite Posts</h3>
+              {favoritePosts.length > 0 ? (
+                favoritePosts.map(post => (
+                  <div key={post.id} className="mb-6 p-4 bg-gray-100 rounded">
+                    <h4 className="text-xl font-bold text-black">{post.title}</h4>
+                    <p className="text-gray-600 text-sm">{post.date}</p>
+                    <p className="text-black">{post.content}</p>
+                    {post.ticker && (
+                      <div className="stock-box mx-auto w-11/12 sm:w-5/6 lg:w-4/5 bg-black border border-black rounded p-2 my-4 text-center">
+                        <p className="text-white">
+                          Current {post.ticker} Stock Price:{' '}
+                          <span className={stockPrices[post.ticker]?.changePercent >= 0 ? 'text-lime-400' : 'text-red-400'}>
+                            {stockPrices[post.ticker]?.price || 'Loading...'}
+                            {stockPrices[post.ticker]?.changePercent !== null && ` (${stockPrices[post.ticker]?.changePercent.toFixed(2)}%)`}
+                          </span>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="text-black">You have no favorite posts yet. Go to the <a href="index.html" className="text-blue-500 hover:underline">Home</a> page to favorite some posts!</p>
+              )}
+            </section>
+          </main>
+        </div>
+      );
+    }
+
+    // Render with error boundary
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(
+      <ErrorBoundary>
+        <Profile />
+      </ErrorBoundary>
+    );
+  </script>
+</body>
+</html>
