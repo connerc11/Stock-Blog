@@ -15,16 +15,13 @@
   <script type="text/babel">
     function StockSearch() {
       const [ticker, setTicker] = React.useState('');
-      const [stockPrice, setStockPrice] = React.useState(null);
-      const [priceChange, setPriceChange] = React.useState(null);
+      const [stockResults, setStockResults] = React.useState([]);
       const [error, setError] = React.useState(null);
 
       const handleSearch = async (e) => {
         e.preventDefault();
         if (!ticker.trim()) {
           setError('Please enter a stock ticker');
-          setStockPrice(null);
-          setPriceChange(null);
           return;
         }
 
@@ -34,20 +31,27 @@
           );
           const data = await response.json();
           if (data && data[0] && data[0].price) {
-            setStockPrice(`$${parseFloat(data[0].price).toFixed(2)}`);
-            setPriceChange(parseFloat(data[0].changesPercentage));
+            setStockResults([
+              ...stockResults,
+              {
+                ticker: ticker.toUpperCase(),
+                price: `$${parseFloat(data[0].price).toFixed(2)}`,
+                changePercent: parseFloat(data[0].changesPercentage)
+              }
+            ]);
             setError(null);
+            setTicker(''); // Clear input after successful search
           } else {
             setError('No data found for this ticker');
-            setStockPrice(null);
-            setPriceChange(null);
           }
         } catch (error) {
           console.error('Error fetching stock price:', error);
           setError('Error fetching price. Please try again.');
-          setStockPrice(null);
-          setPriceChange(null);
         }
+      };
+
+      const handleRemove = (tickerToRemove) => {
+        setStockResults(stockResults.filter(result => result.ticker !== tickerToRemove));
       };
 
       return (
@@ -79,15 +83,29 @@
               {error && (
                 <p className="text-red-600 mt-4 text-center">{error}</p>
               )}
-              {stockPrice && (
-                <div className="stock-box mx-auto w-11/12 sm:w-5/6 lg:w-4/5 bg-black border border-black rounded p-2 mt-6 text-center">
-                  <p className="text-white">
-                    Current {ticker.toUpperCase()} Stock Price:{' '}
-                    <span className={priceChange >= 0 ? 'text-lime-400' : 'text-red-400'}>
-                      {stockPrice}
-                      {priceChange !== null && ` (${priceChange.toFixed(2)}%)`}
-                    </span>
-                  </p>
+              {stockResults.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold mb-4 text-black">Search Results</h3>
+                  {stockResults.map((result, index) => (
+                    <div
+                      key={index}
+                      className="stock-box mx-auto w-11/12 sm:w-5/6 lg:w-4/5 bg-black border border-black rounded p-2 mb-4 text-center"
+                    >
+                      <p className="text-white mb-2">
+                        Current {result.ticker} Stock Price:{' '}
+                        <span className={result.changePercent >= 0 ? 'text-lime-400' : 'text-red-400'}>
+                          {result.price}
+                          {result.changePercent !== null && ` (${result.changePercent.toFixed(2)}%)`}
+                        </span>
+                      </p>
+                      <button
+                        onClick={() => handleRemove(result.ticker)}
+                        className="text-white hover:text-gray-300 text-sm sm:text-base"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </section>
